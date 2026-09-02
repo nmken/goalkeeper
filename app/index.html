@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GoalKeeper</title>
+<style>
+  @font-face {
+    font-family: 'Kalam';
+    src: url('fonts/Kalam-Bold.woff2') format('woff2');
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: 'Patrick Hand';
+    src: url('fonts/PatrickHand-Regular.woff2') format('woff2');
+    font-weight: 400;
+  }
+
+  :root {
+    --blue: #8B5CF6;
+    --glass: rgba(255,255,255,0.42);
+    --glass-border: rgba(255,255,255,0.78);
+    --ink: #2f2a45;
+    --ink-dim: rgba(47,42,69,0.52);
+    --marker-red: #ff4d4d;
+    --pen-blue: #7a5cd6;
+    --pencil: #2d2d2d;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  input, [contenteditable] { -webkit-user-select: text; user-select: text; }
+  ::selection { background: rgba(139,92,246,0.35); }
+  input::placeholder { color: rgba(47,42,69,0.35); }
+
+  html { color-scheme: light; } /* native controls (popups, pickers) render light */
+  html, body { height: 100%; overflow: hidden; }
+
+  /* themed scrollbars — global floating lavender pill, inset from edges and corners */
+  * { scrollbar-width: thin; scrollbar-color: rgba(139,92,246,0.35) transparent; }
+  ::-webkit-scrollbar { width: 14px; height: 14px; }
+  ::-webkit-scrollbar-track { background: transparent; margin: 22px 0; } /* stop short of rounded corners */
+  ::-webkit-scrollbar-track:horizontal { margin: 0 22px; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(139,92,246,0.22);      /* quiet lavender at rest */
+    border: 4px solid transparent;          /* floats off the edge: 14px lane -> 6px pill */
+    background-clip: padding-box;
+    border-radius: 12px;
+    min-height: 36px;
+  }
+  ::-webkit-scrollbar-thumb:hover  { background: rgba(139,92,246,0.45); background-clip: padding-box; border: 4px solid transparent; }
+  ::-webkit-scrollbar-thumb:active { background: rgba(139,92,246,0.70); background-clip: padding-box; border: 4px solid transparent; }
+  body {
+    font-family: 'Patrick Hand', 'Comic Sans MS', cursive;
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 700px at 82% -10%, rgba(255,160,210,0.30), transparent 60%),
+      radial-gradient(900px 650px at -10% 90%, rgba(150,115,255,0.25), transparent 60%),
+      radial-gradient(700px 500px at 55% 115%, rgba(255,140,200,0.18), transparent 60%),
+      linear-gradient(160deg, #dedcff 0%, #d3d3ff 45%, #cdc9ff 100%);
+  }
+
+  /* soft bokeh blobs so the glass has something to blur (radial gradients: soft in every renderer) */
+  .blob { position: fixed; border-radius: 50%; opacity: .55; pointer-events: none; }
+  .blob.b1 { width: 480px; height: 480px; left: 8%; top: 12%; background: radial-gradient(circle, rgba(150,110,255,0.32) 0%, rgba(150,110,255,0) 68%); }
+  .blob.b2 { width: 400px; height: 400px; right: 10%; top: 46%; background: radial-gradient(circle, rgba(255,120,190,0.28) 0%, rgba(255,120,190,0) 68%); }
+  .blob.b3 { width: 440px; height: 440px; left: 40%; bottom: -14%; background: radial-gradient(circle, rgba(180,110,250,0.26) 0%, rgba(180,110,250,0) 68%); }
+
+  .board {
+    position: relative; z-index: 1;
+    height: 100%;
+    display: flex; flex-direction: column;
+    padding: 14px 20px 92px; /* bottom strip reserved for the floating dock */
+    gap: 14px;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 8px 4px 0 78px; /* clear the traffic lights */
+    flex: 0 0 auto;
+  }
+  .topbar h1 {
+    font-family: 'Kalam', cursive;
+    font-size: 34px;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 14px rgba(139,92,246,0.35);
+  }
+  .monthbtn { display: flex; align-items: center; gap: 8px; cursor: pointer; position: relative; }
+  .monthbtn:hover #monthCaret { transform: translateY(2px); }
+  #monthCaret { transition: transform .12s; }
+  .topbar .year { font-size: 18px; color: var(--ink-dim); }
+
+  /* month history popover */
+  .monthpop {
+    position: absolute; top: 100%; left: 0; z-index: 20;
+    min-width: 250px;
+    margin-top: 8px;
+    background: rgba(255,255,255,0.80);
+    border: 1px solid rgba(255,255,255,0.95);
+    border-radius: 20px;
+    backdrop-filter: blur(30px) saturate(1.6);
+    -webkit-backdrop-filter: blur(30px) saturate(1.6);
+    box-shadow: 0 22px 60px rgba(95,70,190,0.35), inset 0 1px 0 rgba(255,255,255,0.95);
+    padding: 8px;
+  }
+  .mprow {
+    display: flex; align-items: baseline; gap: 10px;
+    font-size: 19px;
+    padding: 7px 12px;
+    border-radius: 14px;
+    cursor: pointer;
+  }
+  .mprow:hover { background: rgba(139,92,246,0.16); box-shadow: 0 0 0 1.5px rgba(139,92,246,0.5); }
+  .mprow .mname { font-family: 'Kalam', cursive; font-size: 18px; }
+  .mprow .mearn { margin-left: auto; color: var(--pen-blue); font-size: 16px; }
+  .mprow.on .mname { color: var(--blue); }
+
+  .viewtag {
+    font-size: 15px; color: var(--marker-red);
+    border: 2px dashed rgba(255,77,77,0.55);
+    border-radius: 140px 10px 120px 12px / 12px 110px 10px 130px;
+    padding: 1px 12px;
+    transform: rotate(-2deg);
+  }
+  .backchip {
+    font-size: 16px; color: var(--pen-blue);
+    padding: 3px 14px;
+    background: var(--glass);
+    border: 1.5px dashed rgba(122,92,214,0.55);
+    border-radius: 160px 14px 140px 16px / 16px 130px 14px 150px;
+    cursor: pointer;
+    transform: rotate(1.5deg);
+  }
+  .backchip:hover { box-shadow: 0 0 14px rgba(139,92,246,0.45); }
+  body.viewing-past .fab, body.viewing-past .bonuschip, body.viewing-past #gearBtn { display: none; }
+  .topbar .spacer { flex: 1; }
+  .iconbtn {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    cursor: pointer;
+    transition: box-shadow .15s, transform .1s;
+  }
+  .iconbtn:hover { box-shadow: 0 0 0 2px rgba(139,92,246,0.55), 0 0 22px rgba(139,92,246,0.45); }
+  .iconbtn:active { transform: scale(.93); }
+  .iconbtn svg { width: 20px; height: 20px; stroke: var(--ink); }
+
+  /* ---------- grid ---------- */
+  .grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 236px minmax(0,1fr) 320px;
+    gap: 16px;
+  }
+  .col { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+
+  .panel {
+    position: relative;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 26px;
+    backdrop-filter: blur(28px) saturate(1.6);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    box-shadow: 0 18px 46px rgba(95,70,190,0.22), inset 0 1px 0 rgba(255,255,255,0.85);
+    animation: floatin .55s cubic-bezier(.2,.9,.3,1.2) backwards;
+  }
+  /* specular highlight strip */
+  .panel::before {
+    content: ''; position: absolute; left: 8%; right: 8%; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent);
+    pointer-events: none;
+  }
+  @keyframes floatin {
+    from { opacity: 0; transform: translateY(16px) scale(.98); }
+    to   { opacity: 1; transform: none; }
+  }
+  .panel h2 {
+    font-family: 'Kalam', cursive;
+    font-size: 17px;
+    letter-spacing: .5px;
+    color: var(--ink-dim);
+    padding: 14px 18px 0;
+  }
+
+  /* ---------- ladder ---------- */
+  .ladder { flex: 1; min-height: 0; display: flex; flex-direction: column; animation-delay: .05s; }
+  /* bottom padding ≥ corner radius + edge fade: content never hard-clips against the rounded corner */
+  .ladder-list {
+    flex: 1; overflow-y: auto; padding: 8px 14px 30px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 22px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 22px), transparent 100%);
+  }
+  .lrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 3px 4px;
+    font-size: 19px;
+    border-radius: 12px;
+  }
+  .lrow[data-kind] { cursor: pointer; transition: background .12s, box-shadow .15s; }
+  .lrow[data-kind]:hover { background: rgba(255,255,255,0.45); box-shadow: 0 0 0 1.5px rgba(139,92,246,0.55); }
+  .lrow .cum { font-family: 'Kalam', cursive; font-size: 18px; }
+  .lrow .amt { color: var(--ink-dim); font-size: 14px; margin-left: auto; }
+  .lrow.future { opacity: .34; }
+  .lrow.future .cum { color: var(--ink-dim); }
+  .lrow .flag {
+    font-size: 12px; color: var(--blue);
+    border: 1.5px dashed rgba(139,92,246,0.7);
+    border-radius: 120px 8px 100px 10px / 10px 90px 8px 110px;
+    padding: 0 7px; margin-left: auto;
+    transform: rotate(-2deg);
+  }
+  .lrow.bonusrow { color: var(--pen-blue); font-size: 16px; padding-left: 34px; }
+  .cbx { width: 22px; height: 22px; flex: 0 0 22px; }
+  .empty-hint { flex: 1; display: grid; place-items: center; opacity: .55; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: space-evenly;
+    padding: 20px 18px;
+    gap: 8px;
+    animation-delay: .1s;
+  }
+  .earned { text-align: center; }
+  .earned .word {
+    font-family: 'Kalam', cursive; font-size: 20px; color: var(--ink-dim);
+    letter-spacing: 2px;
+  }
+  .earned .word svg { display: block; margin: 2px auto 0; }
+  .earned .val {
+    font-family: 'Kalam', cursive;
+    font-size: 74px; line-height: 1.05;
+    text-shadow: 0 0 30px rgba(139,92,246,0.45), 0 2px 0 rgba(255,255,255,0.55);
+  }
+  .earned .sub {
+    font-size: 19px; color: var(--pen-blue);
+    margin-top: 2px;
+    transform: rotate(-1.2deg);
+  }
+  .earned .sub #collectedVal { font-family: 'Kalam', cursive; font-size: 21px; }
+  .earned .sub svg { display: block; margin: 0 auto; }
+  .ringwrap { position: relative; width: 172px; height: 172px; flex: 0 0 172px; }
+  .ringwrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ringlabel {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .ringlabel .n { font-family: 'Kalam', cursive; font-size: 52px; line-height: 1; }
+  .ringlabel .of { font-size: 16px; color: var(--ink-dim); }
+
+  /* ---------- chart ---------- */
+  .chart { flex: 1; min-height: 0; display: flex; flex-direction: column; animation-delay: .15s; overflow: visible; }
+  .bars {
+    flex: 1; min-height: 0; /* height comes from the panel, never from the bars — breaks the grow-on-render loop */
+    display: flex; align-items: flex-end; justify-content: space-evenly;
+    padding: 10px 26px 30px;
+  }
+  .barcol { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .barcol .wk { font-family: 'Kalam', cursive; font-size: 14px; color: var(--ink-dim); }
+  .cash .bill { animation: billdrop .3s cubic-bezier(.3,1.4,.4,1) backwards; }
+  @keyframes billdrop {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ---------- leaderboard ---------- */
+  .leader { flex: 1; min-height: 0; display: flex; flex-direction: column; animation-delay: .2s; }
+  .leader-list {
+    flex: 1; overflow-y: auto; padding: 6px 10px 16px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 14px), transparent 100%);
+  }
+  .prow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: background .12s, box-shadow .15s, transform .1s;
+  }
+  .prow:hover { background: rgba(255,255,255,0.45); box-shadow: 0 0 0 1.5px rgba(139,92,246,0.55), 0 0 18px rgba(139,92,246,0.3); }
+  .prow:active { transform: scale(.98); }
+  .prow .nm { font-size: 21px; min-width: 66px; flex-shrink: 0; }
+  .prow.me .nm { color: #c07a00; }
+  .prow .star { width: 20px; height: 20px; margin-left: -4px; flex-shrink: 0; }
+  .prow .twrap { flex: 1; min-width: 0; overflow: hidden; }
+  .prow .tally { max-width: 100%; height: auto; display: block; } /* viewBox scales tallies down so the count never leaves view */
+  .prow .cnt { font-family: 'Kalam', cursive; font-size: 17px; color: var(--ink-dim); flex-shrink: 0; margin-left: auto; }
+  .leader .hint { font-size: 13px; color: var(--ink-dim); text-align: center; padding: 0 0 10px; opacity: .7; }
+
+  /* ---------- goals post-it ---------- */
+  .postit {
+    flex: 0 0 auto;
+    position: relative;
+    background: linear-gradient(170deg, #ffe4f2 0%, #ffd2e8 100%);
+    color: var(--pencil);
+    border: 2.5px solid var(--pencil);
+    border-radius: 255px 18px 225px 18px / 18px 225px 18px 255px;
+    box-shadow: 7px 8px 0 rgba(80,55,150,0.38);
+    transform: rotate(-1.4deg);
+    padding: 20px 18px 14px;
+    animation: floatin .55s cubic-bezier(.2,.9,.3,1.2) .25s backwards;
+  }
+  .postit .tape {
+    position: absolute; top: -13px; left: 50%;
+    width: 92px; height: 26px;
+    transform: translateX(-50%) rotate(2.5deg);
+    background: rgba(255,255,255,0.35);
+    border-left: 2px dashed rgba(0,0,0,0.12);
+    border-right: 2px dashed rgba(0,0,0,0.12);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .postit h2 {
+    font-family: 'Kalam', cursive; font-size: 21px; padding: 0 0 6px 2px; color: var(--pencil);
+    display: inline-block;
+    border-bottom: 3px solid var(--marker-red);
+    border-radius: 2px 60px 2px 40px / 30px 2px 50px 2px;
+    margin-bottom: 6px;
+  }
+  .grow {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 19px; line-height: 1.45;
+    padding: 1px 0;
+    cursor: pointer;
+    position: relative;
+  }
+  .grow .gtxt { flex: 1; outline: none; border-radius: 4px; position: relative; }
+  .grow .gtxt:focus { background: rgba(255,255,255,0.55); }
+  .grow.done .gtxt { color: rgba(45,45,45,0.55); }
+  .grow.done .gtxt::after {
+    content: ''; position: absolute; left: -2px; right: -2px; top: 54%; height: 2.5px;
+    background: var(--marker-red);
+    border-radius: 50% 30% 60% 40%;
+    transform: rotate(-1deg);
+  }
+  .grow .gchk { width: 24px; height: 24px; flex: 0 0 24px; }
+  .grow .del {
+    opacity: 0; color: var(--marker-red); font-size: 16px; padding: 0 3px; flex: 0 0 auto;
+  }
+  .grow:hover .del { opacity: .8; }
+  .postit .addgoal {
+    font-size: 16px; color: rgba(45,45,45,0.5); cursor: pointer; padding: 3px 0 0 33px;
+  }
+  .postit .addgoal:hover { color: var(--pencil); }
+
+  /* ---------- floating + bubble ---------- */
+  .fab {
+    position: fixed; left: 50%; margin-left: -37px; bottom: 14px; z-index: 5;
+    width: 74px; height: 74px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(139,92,246,0.82);
+    border: 1.5px solid rgba(255,255,255,0.65);
+    backdrop-filter: blur(24px) saturate(1.8);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
+    box-shadow: 0 14px 38px rgba(0,0,0,0.45), 0 0 34px rgba(139,92,246,0.45), inset 0 1px 0 rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: transform .12s, box-shadow .15s;
+    animation: bob 3.2s ease-in-out infinite;
+  }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  .fab:hover { box-shadow: 0 14px 38px rgba(0,0,0,0.45), 0 0 54px rgba(139,92,246,0.8), 0 0 0 3px rgba(139,92,246,0.5); animation-play-state: paused; }
+  .fab:active { transform: scale(.9); }
+  .fab svg { width: 34px; height: 34px; }
+
+  .bonuschip {
+    position: fixed; left: 50%; margin-left: 58px; bottom: 34px; z-index: 5;
+    font-size: 17px; color: var(--pen-blue);
+    padding: 6px 16px;
+    background: var(--glass);
+    border: 1.5px dashed rgba(122,92,214,0.55);
+    border-radius: 160px 14px 140px 16px / 16px 130px 14px 150px;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    cursor: pointer;
+    transform: rotate(-2deg);
+    transition: box-shadow .15s, transform .1s;
+  }
+  .bonuschip:hover { box-shadow: 0 0 20px rgba(139,92,246,0.5); transform: rotate(-2deg) scale(1.05); }
+  .bonuschip:active { transform: rotate(-2deg) scale(.95); }
+
+  /* ---------- sheets / modals ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 10;
+    display: none; place-items: center;
+    background: rgba(90,75,150,0.30);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .overlay.show { display: grid; }
+  .sheet {
+    width: 340px;
+    background: rgba(255,255,255,0.68);
+    border: 1px solid rgba(255,255,255,0.95);
+    border-radius: 26px;
+    backdrop-filter: blur(34px) saturate(1.7);
+    -webkit-backdrop-filter: blur(34px) saturate(1.7);
+    box-shadow: 0 30px 80px rgba(95,70,190,0.35), inset 0 1px 0 rgba(255,255,255,0.95);
+    padding: 22px 24px;
+    animation: floatin .3s cubic-bezier(.2,.9,.3,1.25);
+  }
+  .sheet h3 { font-family: 'Kalam', cursive; font-size: 22px; margin-bottom: 14px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 15px; color: var(--ink-dim); margin-bottom: 3px; }
+  .field input {
+    width: 100%;
+    font-family: 'Patrick Hand', cursive; font-size: 22px; color: var(--ink);
+    background: rgba(255,255,255,0.75);
+    border: 2px solid rgba(64,54,107,0.35);
+    border-radius: 180px 12px 160px 14px / 14px 150px 12px 170px;
+    padding: 7px 14px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(139,92,246,0.28), 0 0 18px rgba(139,92,246,0.35); }
+  .sheet .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+  .btn {
+    font-family: 'Patrick Hand', cursive; font-size: 19px;
+    padding: 6px 22px;
+    color: var(--ink);
+    background: rgba(255,255,255,0.65);
+    border: 2px solid rgba(64,54,107,0.40);
+    border-radius: 200px 14px 180px 16px / 16px 170px 14px 190px;
+    box-shadow: 3px 3px 0 rgba(80,60,160,0.35);
+    cursor: pointer;
+    transition: all .1s;
+  }
+  .btn:hover { background: rgba(139,92,246,0.85); border-color: rgba(139,92,246,0.9); color: #fff; transform: translate(1px,1px); box-shadow: 2px 2px 0 rgba(80,60,160,0.35); }
+  .btn:active { transform: translate(3px,3px); box-shadow: none; }
+  .btn.ghost { opacity: .65; box-shadow: none; }
+  .btn.ghost:hover { background: rgba(255,255,255,0.9); color: var(--ink); }
+  .btn.danger { margin-right: auto; color: #d6336c; border-color: rgba(214,51,108,0.5); box-shadow: none; }
+  .btn.danger:hover { background: rgba(255,77,77,0.55); border-color: rgba(255,140,140,0.8); color: #fff; }
+
+  /* week picker chips */
+  .weekchips { display: flex; gap: 7px; }
+  .wchip {
+    flex: 1; text-align: center;
+    font-size: 17px; padding: 4px 0;
+    color: var(--ink-dim);
+    border: 2px solid rgba(64,54,107,0.30);
+    border-radius: 140px 10px 120px 12px / 12px 110px 10px 130px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .wchip:hover { border-color: rgba(139,92,246,0.6); color: var(--ink); }
+  .wchip.on {
+    color: #fff;
+    background: rgba(139,92,246,0.85);
+    border-color: var(--blue);
+    box-shadow: 0 0 14px rgba(139,92,246,0.45);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel, .postit, .fab, .sheet, .cash .bill { animation: none; }
+  }
+
+  /* settings closers list */
+  .closerrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .closerrow input { flex: 1; font-size: 18px !important; padding: 4px 12px !important; }
+  .closerrow .x { color: var(--marker-red); cursor: pointer; font-size: 20px; padding: 0 4px; }
+  .addcloser { font-size: 15px; color: var(--ink-dim); cursor: pointer; padding-top: 2px; }
+  .addcloser:hover { color: var(--ink); }
+  .setgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+</style>
+</head>
+<body>
+
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<div class="board">
+  <div class="topbar">
+    <div class="monthbtn" id="monthBtn">
+      <h1 id="monthName">August</h1>
+      <svg id="monthCaret" width="16" height="11" viewBox="0 0 16 11"><path d="M2 2.5 C 4.5 5, 6.5 7.5, 8 9 C 9.5 7, 12 4.5, 14 2" stroke="#8B5CF6" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="monthpop" id="monthPop" hidden></div>
+    </div>
+    <span class="year" id="yearNum">2026</span>
+    <span class="viewtag" id="viewTag" hidden>view only</span>
+    <span class="backchip" id="backChip" hidden>← back to now</span>
+    <div class="spacer"></div>
+    <div class="iconbtn" id="gearBtn" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3.2"/>
+        <path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.3 5.3l1.9 1.9M16.8 16.8l1.9 1.9M18.7 5.3l-1.9 1.9M7.2 16.8l-1.9 1.9"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- ladder -->
+    <div class="panel ladder">
+      <h2>Deals</h2>
+      <div class="ladder-list" id="ladderList"></div>
+    </div>
+
+    <!-- middle -->
+    <div class="col">
+      <div class="panel hero">
+        <div class="earned">
+          <div class="word">EARNED
+            <svg width="96" height="8" viewBox="0 0 96 8"><path d="M2 5 C 18 1, 30 7, 48 4 S 80 2, 94 5" stroke="#8B5CF6" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".8"/></svg>
+          </div>
+          <div class="val" id="earnedVal">$0</div>
+          <div class="sub"><span id="collectedVal">$0</span> collected
+            <svg width="70" height="7" viewBox="0 0 70 7"><path d="M2 4 C 14 1, 26 6, 40 3 S 58 2, 68 4" stroke="#8b6fe0" stroke-width="1.8" fill="none" stroke-linecap="round" opacity=".7"/></svg>
+          </div>
+        </div>
+        <div class="ringwrap">
+          <svg viewBox="0 0 172 172" id="ringSvg"></svg>
+          <div class="ringlabel">
+            <div class="n" id="dealCount">0</div>
+            <div class="of" id="dealOf">/ 18</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel chart">
+        <h2>Weeks</h2>
+        <div class="bars" id="barsEl"></div>
+      </div>
+    </div>
+
+    <!-- right -->
+    <div class="col">
+      <div class="panel leader">
+        <h2>Leaderboard</h2>
+        <div class="leader-list" id="leaderList"></div>
+        <div class="hint">tap +1 &nbsp;·&nbsp; right-click −1</div>
+      </div>
+      <div class="postit">
+        <div class="tape"></div>
+        <h2 id="goalsTitle">August Goals</h2>
+        <div id="goalsList"></div>
+        <div class="addgoal" id="addGoal">+ goal</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bonuschip" id="bonusChip">+ bonus</div>
+<div class="fab" id="fab" title="Log a deal">
+  <svg viewBox="0 0 34 34" fill="none">
+    <path d="M17 6 C17 12 17 22 17 28 M6.5 17.4 C13 17 22 17.2 27.5 16.8" stroke="white" stroke-width="3.4" stroke-linecap="round"/>
+  </svg>
+</div>
+
+<!-- deal sheet -->
+<div class="overlay" id="dealOverlay">
+  <div class="sheet">
+    <h3 id="dealTitle">Log a deal ✍️</h3>
+    <div class="field"><label>Deal total $</label><input type="text" id="dealAmt" inputmode="decimal" placeholder="4500"></div>
+    <div class="field"><label>My commission $ <span id="pctHint"></span></label><input type="text" id="dealComm" inputmode="decimal"></div>
+    <div class="field"><label>Week</label><div class="weekchips" id="dealWeeks"></div></div>
+    <div class="row">
+      <button class="btn danger" id="delDeal" style="display:none">Scrap it</button>
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn" id="saveDeal">Close it!</button>
+    </div>
+  </div>
+</div>
+
+<!-- bonus sheet -->
+<div class="overlay" id="bonusOverlay">
+  <div class="sheet">
+    <h3 id="bonusTitle">Add a bonus 🎉</h3>
+    <div class="field"><label>Bonus $</label><input type="text" id="bonusAmt" inputmode="decimal" placeholder="250"></div>
+    <div class="field"><label>For…</label><input type="text" id="bonusLabel" placeholder="weekend"></div>
+    <div class="field"><label>Week</label><div class="weekchips" id="bonusWeeks"></div></div>
+    <div class="row">
+      <button class="btn danger" id="delBonus" style="display:none">Scrap it</button>
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn" id="saveBonus">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- settings sheet -->
+<div class="overlay" id="setOverlay">
+  <div class="sheet">
+    <h3>Settings ⚙️</h3>
+    <div class="setgrid">
+      <div class="field"><label>Commission %</label><input type="text" id="setPct" inputmode="decimal"></div>
+      <div class="field"><label>My name</label><input type="text" id="setName"></div>
+      <div class="field"><label>Deals minimum</label><input type="text" id="setMin" inputmode="numeric"></div>
+      <div class="field"><label>Deals goal</label><input type="text" id="setGoal" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label>Closers</label><div id="closerList"></div><div class="addcloser" id="addCloser">+ closer</div></div>
+    <div class="row">
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn" id="saveSet">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ---------- persistence bridge (native WKWebView or browser localStorage) ---------- */
+const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bridge;
+let _loadCb = null;
+const _fromB64 = b64 => {
+  if (!b64) return null;
+  try {
+    const txt = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+    return JSON.parse(txt);
+  } catch (e) { return null; }
+};
+window.__loadedB64 = (b64, existed, starterB64) => {
+  if (_loadCb) _loadCb(_fromB64(b64), !!existed, _fromB64(starterB64));
+};
+function persist() {
+  const json = JSON.stringify(state);
+  if (native) native.postMessage({ type: 'save', data: json });
+  else localStorage.setItem('goalkeeper', json);
+}
+function loadState(cb) {
+  if (native) { _loadCb = cb; native.postMessage({ type: 'load' }); }
+  else {
+    const raw = localStorage.getItem('goalkeeper');
+    let obj = null;
+    try { obj = JSON.parse(raw || 'null'); } catch (e) {}
+    cb(obj, raw !== null, null);
+  }
+}
+
+/* ---------- state ---------- */
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const now = new Date();
+const curMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+function freshBoard() {
+  return {
+    month: curMonth,
+    deals: [],    // {amt, comm, ts}
+    bonuses: [],  // {amt, label, ts}
+    closers: [],  // add your team in Settings
+    goals: [
+      {text:'16 deals minimum', done:false},
+      {text:'18 deals GOAL!!', done:false},
+      {text:'Top closer at least once', done:false},
+    ],
+  };
+}
+let state = Object.assign({ rep:'Me', pct:10, minDeals:16, goalDeals:18, history:[] }, freshBoard());
+
+function rollover() {
+  if (state.month === curMonth) return;
+  const snap = {
+    month: state.month, deals: state.deals, bonuses: state.bonuses,
+    closers: state.closers, goals: state.goals,
+  };
+  state.history.push(snap);
+  if (native) native.postMessage({ type: 'archive', month: snap.month, data: JSON.stringify(snap) });
+  const goals = state.goals.map(g => ({ text: g.text, done: false }));
+  const closers = state.closers.map(c => ({ name: c.name, count: 0 }));
+  Object.assign(state, freshBoard(), { goals, closers });
+  persist();
+}
+
+/* ---------- board accessor: live month or an archived snapshot (read-only) ---------- */
+let viewing = null; // null = live, otherwise index into state.history
+const board = () => viewing === null ? state : state.history[viewing];
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const fmt = n => '$' + Math.round(n).toLocaleString('en-US');
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function num(v) { const n = parseFloat(String(v).replace(/[$,\s]/g, '')); return isNaN(n) ? 0 : n; }
+// deterministic hand jitter
+function j(seed, range) { const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return ((x - Math.floor(x)) * 2 - 1) * range; }
+
+const earnedOf = b => b.deals.reduce((s,d) => s + d.comm, 0) + b.bonuses.reduce((s,b2) => s + b2.amt, 0);
+const earned = () => earnedOf(board());
+const monthLabel = m => { const [y, mo] = m.split('-').map(Number); return MONTHS[mo-1] + ' ' + y; };
+
+/* ---------- hand-drawn SVG bits ---------- */
+function checkboxSVG(checked, seed) {
+  const r = `M3 ${4+j(seed,1.5)} Q ${2+j(seed+1,1)} 2 ${6+j(seed+2,2)} 2.5 L 17 ${2.5+j(seed+3,1)} Q 20 2.5 19.5 6 L ${19.5+j(seed+4,1)} 16 Q 19.7 19.5 16 19.3 L 6 ${19.5+j(seed+5,1)} Q 2.7 19.6 2.8 16 Z`;
+  let mark = '';
+  if (checked) mark = `<path d="M5.5 ${11+j(seed+6,1)} L 9.5 ${15.5+j(seed+7,1)} L 17 ${4.5+j(seed+8,1)}" stroke="#ff6fb5" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  return `<svg class="cbx" viewBox="0 0 22 22"><path d="${r}" stroke="rgba(64,54,107,0.75)" stroke-width="1.8" fill="none" stroke-linecap="round"/>${mark}</svg>`;
+}
+function redCheckSVG(seed) {
+  return `<svg class="gchk" viewBox="0 0 24 24">
+    <path d="M3.5 ${5+j(seed,1)} Q 2.5 3 7 3.2 L 18 ${3+j(seed+1,.8)} Q 21.5 3 21 7 L ${21+j(seed+2,.8)} 17 Q 21.2 21 17 20.8 L 7 ${21+j(seed+3,.8)} Q 3.2 21.2 3.3 17 Z" stroke="#2d2d2d" stroke-width="2" fill="rgba(255,255,255,0.4)" stroke-linecap="round"/>
+    <path class="tick" d="M6 ${12.5+j(seed+4,1)} L 10.5 ${17+j(seed+5,1)} L 19 ${5+j(seed+6,1)}" stroke="#ff4d4d" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+function emptyCheckSVG(seed) {
+  return `<svg class="gchk" viewBox="0 0 24 24">
+    <path d="M3.5 ${5+j(seed,1)} Q 2.5 3 7 3.2 L 18 ${3+j(seed+1,.8)} Q 21.5 3 21 7 L ${21+j(seed+2,.8)} 17 Q 21.2 21 17 20.8 L 7 ${21+j(seed+3,.8)} Q 3.2 21.2 3.3 17 Z" stroke="#2d2d2d" stroke-width="2" fill="rgba(255,255,255,0.4)" stroke-linecap="round"/>
+  </svg>`;
+}
+function tallySVG(count, seed) {
+  if (count <= 0) return `<svg class="tally" height="30" width="30" viewBox="0 0 30 30"><path d="M6 ${15+j(seed,2)} C 12 ${14+j(seed+1,2)}, 20 ${16+j(seed+2,2)}, 26 15" stroke="rgba(64,54,107,0.30)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
+  const groups = Math.floor(count / 5), rem = count % 5;
+  const gw = 34, h = 30;
+  const width = groups * gw + (rem ? rem * 7 + 6 : 0) + 4;
+  let paths = '';
+  let x = 4;
+  for (let g = 0; g < groups; g++) {
+    for (let i = 0; i < 4; i++) {
+      const s = seed + g * 9 + i;
+      paths += `<path d="M${x + i*7 + j(s,1.2)} ${5+j(s+1,1.5)} C ${x + i*7 + j(s+2,2)} 12, ${x + i*7 + j(s+3,2)} 18, ${x + i*7 + j(s+4,1.2)} ${25+j(s+5,1.5)}" stroke="#40366b" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+    }
+    const s2 = seed + g * 9 + 44;
+    paths += `<path d="M${x - 3 + j(s2,1)} ${22+j(s2+1,2)} C ${x+8} ${16+j(s2+2,2)}, ${x+16} ${12+j(s2+3,2)}, ${x + 25 + j(s2+4,1)} ${7+j(s2+5,2)}" stroke="#ff6b6b" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+    x += gw;
+  }
+  for (let i = 0; i < rem; i++) {
+    const s = seed + groups * 9 + i + 100;
+    paths += `<path d="M${x + i*7 + j(s,1.2)} ${5+j(s+1,1.5)} C ${x + i*7 + j(s+2,2)} 12, ${x + i*7 + j(s+3,2)} 18, ${x + i*7 + j(s+4,1.2)} ${25+j(s+5,1.5)}" stroke="#40366b" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+  }
+  return `<svg class="tally" height="${h}" width="${width}" viewBox="0 0 ${width} ${h}"></svg>`.replace('</svg>', paths + '</svg>');
+}
+function starSVG() {
+  return `<svg class="star" viewBox="0 0 24 24"><path d="M12 3.2 L14.3 8.9 L20.6 9.3 L15.8 13.3 L17.4 19.4 L12 16 L6.6 19.5 L8.1 13.4 L3.3 9.4 L9.6 8.9 Z" stroke="#d99a00" stroke-width="1.8" fill="rgba(255,200,60,0.35)" stroke-linejoin="round"/></svg>`;
+}
+
+/* ---------- renders ---------- */
+function renderTop() {
+  const [y, m] = board().month.split('-').map(Number);
+  $('monthName').textContent = MONTHS[m-1];
+  $('yearNum').textContent = y;
+  $('goalsTitle').textContent = MONTHS[m-1] + ' Goals';
+  const past = viewing !== null;
+  $('viewTag').hidden = !past;
+  $('backChip').hidden = !past;
+  document.body.classList.toggle('viewing-past', past);
+}
+
+function renderHero() {
+  $('earnedVal').textContent = fmt(earned());
+  $('collectedVal').textContent = fmt(board().deals.reduce((s, d) => s + d.amt, 0));
+  const n = board().deals.length, goal = state.goalDeals || 18, min = state.minDeals || 16;
+  $('dealCount').textContent = n;
+  $('dealOf').textContent = '/ ' + goal;
+  const R = 72, C = 2 * Math.PI * R;
+  const frac = Math.min(1, n / goal);
+  const minAng = (min / goal) * 2 * Math.PI;
+  const tickX = 86 + Math.cos(minAng) * R, tickY = 86 + Math.sin(minAng) * R;
+  const tx2 = 86 + Math.cos(minAng) * (R + 9), ty2 = 86 + Math.sin(minAng) * (R + 9);
+  $('ringSvg').innerHTML = `
+    <defs>
+      <linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff8fd0"/><stop offset="1" stop-color="#8B5CF6"/>
+      </linearGradient>
+      <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <circle cx="86" cy="86" r="${R}" stroke="rgba(64,54,107,0.15)" stroke-width="10" fill="none"/>
+    <line x1="${tickX}" y1="${tickY}" x2="${tx2}" y2="${ty2}" stroke="rgba(255,212,121,0.9)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="86" cy="86" r="${R}" stroke="url(#rg)" stroke-width="10" fill="none" stroke-linecap="round"
+      filter="url(#glow)" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}"
+      style="transition: stroke-dashoffset .6s cubic-bezier(.3,1.2,.4,1)"/>`;
+}
+
+function renderLadder() {
+  const el = $('ladderList');
+  const entries = [
+    ...board().deals.map((d, i) => ({ ...d, kind: 'deal', i })),
+    ...board().bonuses.map((b, i) => ({ ...b, kind: 'bonus', i })),
+  ].sort((a, b) => a.ts - b.ts);
+
+  if (!entries.length) {
+    el.innerHTML = `<div class="empty-hint">
+      <svg width="120" height="150" viewBox="0 0 120 150">
+        <path d="M20 14 C 60 30, 88 62, 96 118" stroke="rgba(64,54,107,0.5)" stroke-width="2.5" fill="none" stroke-dasharray="7 8" stroke-linecap="round"/>
+        <path d="M84 106 L 97 122 L 103 102" stroke="rgba(64,54,107,0.5)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>`;
+    return;
+  }
+
+  let cum = 0, dealIdx = 0, html = '';
+  for (const e of entries) {
+    cum += e.kind === 'deal' ? e.comm : e.amt;
+    if (e.kind === 'deal') {
+      dealIdx++;
+      let flag = '';
+      if (dealIdx === state.minDeals) flag = '<span class="flag">min!</span>';
+      else if (dealIdx === state.goalDeals) flag = '<span class="flag">GOAL!!</span>';
+      else if (dealIdx === Math.ceil(state.goalDeals / 2)) flag = '<span class="flag">halfway!</span>';
+      html += `<div class="lrow" data-kind="deal" data-idx="${e.i}">${checkboxSVG(true, dealIdx)}<span class="cum">${fmt(cum)}</span>${flag}${flag ? '' : `<span class="amt">${fmt(e.amt)}</span>`}</div>`;
+    } else {
+      html += `<div class="lrow bonusrow" data-kind="bonus" data-idx="${e.i}">+${fmt(e.amt)} ${esc(e.label || 'bonus')}</div>`;
+    }
+  }
+  for (let i = dealIdx + 1; i <= state.goalDeals; i++) {
+    html += `<div class="lrow future">${checkboxSVG(false, i)}<span class="cum">·····</span></div>`;
+  }
+  el.innerHTML = html;
+  el.scrollTop = 0;
+}
+
+function renderLeader() {
+  const rows = [
+    { name: state.rep, count: board().deals.length, me: true },
+    ...board().closers.map((c, i) => ({ ...c, idx: i })),
+  ].sort((a, b) => b.count - a.count);
+  const top = rows[0] && rows[0].count > 0 ? rows[0].count : -1;
+  $('leaderList').innerHTML = rows.map(r => `
+    <div class="prow ${r.me ? 'me' : ''}" data-idx="${r.me ? 'me' : r.idx}">
+      <span class="nm">${esc(r.name)}</span>
+      ${r.count === top ? starSVG() : ''}
+      <span class="twrap">${tallySVG(r.count, (r.me ? 999 : r.idx) * 31 + 7)}</span>
+      <span class="cnt">${r.count}</span>
+    </div>`).join('');
+}
+
+function renderGoals() {
+  const live = viewing === null;
+  $('goalsList').innerHTML = board().goals.map((g, i) => `
+    <div class="grow ${g.done ? 'done' : ''}" data-i="${i}">
+      <span class="chk">${g.done ? redCheckSVG(i * 13 + 3) : emptyCheckSVG(i * 13 + 3)}</span>
+      <span class="gtxt" contenteditable="${live}" spellcheck="false">${esc(g.text)}</span>
+      ${live ? '<span class="del">✕</span>' : ''}
+    </div>`).join('');
+  $('addGoal').style.display = live ? '' : 'none';
+}
+
+/* hand-drawn 3D cash stack: each bill is an oblique slab (front edge + side sliver),
+   the top bill shows its full face in perspective */
+function cashStackSVG(v, max, svgH, seed) {
+  const W = 96, bw = 56, bh = 10, step = 10, dx = 13, dy = 9, baseX = 9;
+  const G = '#2f7d52'; // pencil-green ink
+  const baseY = svgH - bh - 9;
+  const maxBills = Math.max(3, Math.floor((baseY - 42) / step)); // headroom for top face + label
+  const n = v > 0 ? Math.max(1, Math.round((v / max) * maxBills)) : 0;
+  let out = '';
+
+  if (n === 0) {
+    out = `<rect x="${baseX}" y="${baseY}" width="${bw}" height="${bh}" rx="3"
+      fill="none" stroke="rgba(47,125,82,0.35)" stroke-width="1.5" stroke-dasharray="5 5"/>`;
+    return `<svg class="cash" width="${W}" height="${svgH}" viewBox="0 0 ${W} ${svgH}">${out}</svg>`;
+  }
+
+  // grounding shadow, shifted with the oblique depth
+  out += `<ellipse cx="${baseX + bw / 2 + dx / 2}" cy="${baseY + bh + 4.5}" rx="${bw * 0.66}" ry="4.4" fill="rgba(80,55,150,0.16)"/>`;
+
+  for (let i = 0; i < n; i++) {
+    const top = i === n - 1;
+    const strap = (i + 1) % 5 === 0;
+    const stick = j(seed + i * 11, 1) > 0.55 ? 6.5 : 0; // the occasional sloppy bill sticking out
+    const x = baseX + j(seed + i * 3, 3) + stick;
+    const y = baseY - i * step + j(seed + i * 5 + 2, 0.9);
+    const fill = top ? '#bdedcd' : (i % 2 ? '#a7e1ba' : '#b2e7c3');
+    let g = '';
+
+    // right side face — the slab's depth
+    g += `<polygon points="${x + bw},${y} ${x + bw + dx},${y - dy} ${x + bw + dx},${y + bh - dy} ${x + bw},${y + bh}"
+      fill="#79bd92" stroke="${G}" stroke-width="1.4" stroke-linejoin="round"/>`;
+
+    // front face — pressed paper edges
+    g += `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="2.5" fill="${fill}" stroke="${G}" stroke-width="1.5"/>`;
+    g += `<line x1="${x + 3}" y1="${y + 2}" x2="${x + bw - 3}" y2="${y + 2}" stroke="rgba(255,255,255,0.55)" stroke-width="1"/>`;
+    for (let t = 0; t < 3; t++) {
+      const tx = x + 9 + t * (bw / 3.2) + j(seed + i * 13 + t, 4);
+      g += `<line x1="${tx.toFixed(1)}" y1="${y + 3}" x2="${tx.toFixed(1)}" y2="${y + bh - 2.5}" stroke="rgba(47,125,82,0.28)" stroke-width="1"/>`;
+    }
+
+    // currency strap wrapping the bundle (front + side)
+    if (strap) {
+      g += `<rect x="${x + bw / 2 - 7}" y="${y - 0.8}" width="14" height="${bh + 1.6}" rx="2" fill="#f6efe0" stroke="#b09a5f" stroke-width="1"/>
+            <rect x="${x + bw / 2 - 7}" y="${y + bh / 2 - 2.2}" width="14" height="4.4" fill="rgba(139,92,246,0.65)"/>`;
+    }
+
+    // top face of the top bill: the full bill in perspective
+    if (top) {
+      g += `<polygon points="${x},${y} ${x + dx},${y - dy} ${x + bw + dx},${y - dy} ${x + bw},${y}"
+        fill="#d3f4de" stroke="${G}" stroke-width="1.5" stroke-linejoin="round"/>`;
+      // shapes drawn in flipped local space (u,v) -> (x + u + dx*v/dy, y - v); text drawn
+      // separately in screen space with a matching skew so glyphs aren't mirrored
+      const k = (dx / dy).toFixed(4);
+      g += `<g transform="matrix(1 0 ${k} -1 ${x} ${y})">
+        <rect x="2.5" y="1.4" width="${bw - 5}" height="${dy - 2.6}" rx="1.5" fill="none" stroke="${G}" stroke-opacity="0.45" stroke-width="0.8"/>
+        <ellipse cx="${bw / 2}" cy="${dy / 2}" rx="8.6" ry="3" fill="rgba(255,255,255,0.45)" stroke="${G}" stroke-width="1.1"/>
+        <path d="M11 ${dy / 2} q 2.5 -2 5 0 q 2.5 2 5 0" fill="none" stroke="${G}" stroke-opacity="0.5" stroke-width="0.9"/>
+        <path d="M${bw - 21} ${dy / 2} q 2.5 -2 5 0 q 2.5 2 5 0" fill="none" stroke="${G}" stroke-opacity="0.5" stroke-width="0.9"/>
+      </g>`;
+      const faceText = (u, vv, size, txt, op) =>
+        `<text transform="translate(${(x + u + (dx / dy) * vv).toFixed(1)} ${(y - vv + size * 0.36).toFixed(1)}) matrix(1 0 ${-(dx / dy).toFixed(4)} 1 0 0)"
+          text-anchor="middle" font-family="Kalam, cursive" font-size="${size}" fill="${G}" fill-opacity="${op}">${txt}</text>`;
+      g += faceText(bw / 2, dy / 2, 6.4, '$', 1);
+      g += faceText(8, 2.4, 4.6, '100', 0.75);
+      g += faceText(bw - 8, dy - 2.4, 4.6, '100', 0.75);
+    }
+
+    out += `<g class="bill" style="animation-delay:${i * 26}ms">${g}</g>`;
+  }
+
+  // hand-drawn gold coins at the base
+  const cy = baseY + bh - 1.5;
+  const c1x = baseX - 1 + j(seed + 91, 1.5);
+  out += `<ellipse cx="${c1x + 10}" cy="${cy + 3.6}" rx="4.9" ry="1.9" fill="#e5bd54" stroke="#a8842a" stroke-width="1.1"/>
+    <ellipse cx="${c1x + 10}" cy="${cy + 2.3}" rx="4.9" ry="1.9" fill="#f2cf6b" stroke="#a8842a" stroke-width="1.1"/>
+    <circle cx="${c1x}" cy="${cy}" r="4.7" fill="#f2cf6b" stroke="#a8842a" stroke-width="1.2"/>
+    <circle cx="${c1x}" cy="${cy}" r="3.1" fill="none" stroke="#a8842a" stroke-opacity="0.5" stroke-width="0.8"/>
+    <text x="${c1x}" y="${cy + 2.1}" text-anchor="middle" font-family="Kalam, cursive" font-size="5.6" fill="#8a6a1e">$</text>`;
+
+  // value label above the top face
+  const labelY = baseY - (n - 1) * step - dy - 8;
+  out += `<text x="${W / 2}" y="${labelY}" text-anchor="middle" font-family="Kalam, cursive" font-size="14" fill="#7a5cd6">${fmt(v)}</text>`;
+
+  return `<svg class="cash" width="${W}" height="${svgH}" viewBox="0 0 ${W} ${svgH}">${out}</svg>`;
+}
+
+function renderChart() {
+  const weeks = [0, 0, 0, 0, 0];
+  const wk = ts => { const d = new Date(ts).getDate(); return Math.min(4, Math.floor((d - 1) / 7)); };
+  board().deals.forEach(d => weeks[wk(d.ts)] += d.comm);
+  board().bonuses.forEach(b => weeks[wk(b.ts)] += b.amt);
+  const max = Math.max(...weeks, 1);
+  const svgH = Math.max(80, ($('barsEl').clientHeight || 180) - 66);
+  $('barsEl').innerHTML = weeks.map((v, i) => `
+    <div class="barcol">
+      ${cashStackSVG(v, max, svgH, i * 97 + 13)}
+      <div class="wk">w${i + 1}</div>
+    </div>`).join('');
+}
+
+function renderAll() { renderTop(); renderHero(); renderLadder(); renderLeader(); renderGoals(); renderChart(); }
+
+/* ---------- sheets ---------- */
+function openSheet(id) { $(id).classList.add('show'); const inp = $(id).querySelector('input'); if (inp) setTimeout(() => inp.focus(), 60); }
+function closeSheets() { document.querySelectorAll('.overlay').forEach(o => o.classList.remove('show')); }
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('mousedown', e => { if (e.target === o) closeSheets(); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheets(); });
+
+/* ---------- week picker ---------- */
+const weekOf = ts => Math.min(4, Math.floor((new Date(ts).getDate() - 1) / 7));
+function tsForWeek(w, prev) {
+  if (prev != null && weekOf(prev) === w) return prev; // week unchanged: keep original order
+  const [y, m] = state.month.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const day = Math.min([4, 11, 18, 25, 29][w], lastDay); // mid-week anchor
+  return new Date(y, m - 1, day, 12).getTime();
+}
+let selWeek = 0;
+function renderWeekChips(elId) {
+  $(elId).innerHTML = [0, 1, 2, 3, 4].map(w =>
+    `<div class="wchip ${w === selWeek ? 'on' : ''}" data-w="${w}">w${w + 1}</div>`).join('');
+}
+['dealWeeks', 'bonusWeeks'].forEach(id => $(id).addEventListener('click', e => {
+  const chip = e.target.closest('.wchip'); if (!chip) return;
+  selWeek = Number(chip.dataset.w);
+  renderWeekChips(id);
+}));
+
+/* ---------- month history popover ---------- */
+$('monthBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  const pop = $('monthPop');
+  if (!pop.hidden) { pop.hidden = true; return; }
+  const rows = [
+    { label: monthLabel(state.month), earn: earnedOf(state), idx: null },
+    ...state.history.map((h, i) => ({ label: monthLabel(h.month), earn: earnedOf(h), idx: i })).reverse(),
+  ];
+  pop.innerHTML = rows.map(r => `
+    <div class="mprow ${r.idx === viewing ? 'on' : ''}" data-h="${r.idx === null ? '' : r.idx}">
+      <span class="mname">${r.label}</span><span class="mearn">${fmt(r.earn)}</span>
+    </div>`).join('');
+  pop.hidden = false;
+});
+$('monthPop').addEventListener('click', e => {
+  const row = e.target.closest('.mprow'); if (!row) return;
+  e.stopPropagation();
+  const h = row.getAttribute('data-h');
+  viewing = h === '' ? null : Number(h);
+  $('monthPop').hidden = true;
+  closeSheets();
+  renderAll();
+});
+document.addEventListener('click', () => { $('monthPop').hidden = true; });
+$('backChip').addEventListener('click', () => { viewing = null; renderAll(); });
+
+/* deal sheet — add & edit */
+let commTouched = false;
+let amtTouched = false;
+let editing = null; // {kind:'deal'|'bonus', idx} or null for add
+$('fab').addEventListener('click', () => {
+  if (viewing !== null) return;
+  editing = null; commTouched = false; amtTouched = false;
+  $('dealTitle').textContent = 'Log a deal ✍️';
+  $('saveDeal').textContent = 'Close it!';
+  $('delDeal').style.display = 'none';
+  $('dealAmt').value = ''; $('dealComm').value = '';
+  $('pctHint').textContent = `(auto ${state.pct}%)`;
+  selWeek = weekOf(Date.now()); renderWeekChips('dealWeeks');
+  openSheet('dealOverlay');
+});
+$('dealAmt').addEventListener('input', () => {
+  amtTouched = $('dealAmt').value.trim() !== '';
+  if (!commTouched) $('dealComm').value = Math.round(num($('dealAmt').value) * state.pct / 100) || '';
+});
+$('dealComm').addEventListener('input', () => {
+  commTouched = $('dealComm').value.trim() !== '';
+  // mirror autofill: commission fills in the deal total, unless the total was hand-entered
+  if (!amtTouched && state.pct > 0) $('dealAmt').value = Math.round(num($('dealComm').value) * 100 / state.pct) || '';
+});
+function saveDeal() {
+  const amt = num($('dealAmt').value);
+  const comm = num($('dealComm').value) || Math.round(amt * state.pct / 100);
+  if (amt <= 0 && comm <= 0) return;
+  if (editing && editing.kind === 'deal') {
+    const d = state.deals[editing.idx];
+    d.amt = amt; d.comm = comm; d.ts = tsForWeek(selWeek, d.ts);
+  } else {
+    state.deals.push({ amt, comm, ts: tsForWeek(selWeek, Date.now()) });
+  }
+  persist(); closeSheets(); renderAll();
+}
+$('saveDeal').addEventListener('click', saveDeal);
+$('dealOverlay').addEventListener('keydown', e => { if (e.key === 'Enter') saveDeal(); });
+$('delDeal').addEventListener('click', () => {
+  if (editing && editing.kind === 'deal') state.deals.splice(editing.idx, 1);
+  persist(); closeSheets(); renderAll();
+});
+
+/* bonus sheet — add & edit */
+$('bonusChip').addEventListener('click', () => {
+  if (viewing !== null) return;
+  editing = null;
+  $('bonusTitle').textContent = 'Add a bonus 🎉';
+  $('saveBonus').textContent = 'Add';
+  $('delBonus').style.display = 'none';
+  $('bonusAmt').value = ''; $('bonusLabel').value = '';
+  selWeek = weekOf(Date.now()); renderWeekChips('bonusWeeks');
+  openSheet('bonusOverlay');
+});
+function saveBonus() {
+  const amt = num($('bonusAmt').value);
+  if (amt <= 0) return;
+  if (editing && editing.kind === 'bonus') {
+    const b = state.bonuses[editing.idx];
+    b.amt = amt; b.label = $('bonusLabel').value.trim(); b.ts = tsForWeek(selWeek, b.ts);
+  } else {
+    state.bonuses.push({ amt, label: $('bonusLabel').value.trim(), ts: tsForWeek(selWeek, Date.now()) });
+  }
+  persist(); closeSheets(); renderAll();
+}
+$('saveBonus').addEventListener('click', saveBonus);
+$('bonusOverlay').addEventListener('keydown', e => { if (e.key === 'Enter') saveBonus(); });
+$('delBonus').addEventListener('click', () => {
+  if (editing && editing.kind === 'bonus') state.bonuses.splice(editing.idx, 1);
+  persist(); closeSheets(); renderAll();
+});
+
+/* ladder: click a logged deal/bonus to edit it (amount, week, delete) */
+$('ladderList').addEventListener('click', e => {
+  if (viewing !== null) return;
+  const row = e.target.closest('.lrow[data-kind]'); if (!row) return;
+  const kind = row.dataset.kind, idx = Number(row.dataset.idx);
+  editing = { kind, idx };
+  if (kind === 'deal') {
+    const d = state.deals[idx];
+    commTouched = true; amtTouched = true; // don't clobber stored values while editing
+    $('dealTitle').textContent = 'Edit deal ✏️';
+    $('saveDeal').textContent = 'Save';
+    $('delDeal').style.display = '';
+    $('dealAmt').value = d.amt || ''; $('dealComm').value = d.comm || '';
+    $('pctHint').textContent = `(auto ${state.pct}%)`;
+    selWeek = weekOf(d.ts); renderWeekChips('dealWeeks');
+    openSheet('dealOverlay');
+  } else {
+    const b = state.bonuses[idx];
+    $('bonusTitle').textContent = 'Edit bonus ✏️';
+    $('saveBonus').textContent = 'Save';
+    $('delBonus').style.display = '';
+    $('bonusAmt').value = b.amt || ''; $('bonusLabel').value = b.label || '';
+    selWeek = weekOf(b.ts); renderWeekChips('bonusWeeks');
+    openSheet('bonusOverlay');
+  }
+});
+
+/* settings sheet */
+function renderCloserInputs() {
+  $('closerList').innerHTML = state.closers.map((c, i) => `
+    <div class="closerrow"><input type="text" value="${esc(c.name)}" data-ci="${i}"><span class="x" data-cx="${i}">✕</span></div>`).join('');
+}
+$('gearBtn').addEventListener('click', () => {
+  $('setPct').value = state.pct; $('setName').value = state.rep;
+  $('setMin').value = state.minDeals; $('setGoal').value = state.goalDeals;
+  renderCloserInputs(); openSheet('setOverlay');
+});
+$('closerList').addEventListener('click', e => {
+  const x = e.target.getAttribute('data-cx');
+  if (x !== null) { state.closers.splice(Number(x), 1); renderCloserInputs(); }
+});
+$('addCloser').addEventListener('click', () => { state.closers.push({ name: '', count: 0 }); renderCloserInputs(); });
+$('saveSet').addEventListener('click', () => {
+  state.pct = num($('setPct').value) || state.pct;
+  state.rep = $('setName').value.trim() || state.rep;
+  state.minDeals = Math.max(1, Math.round(num($('setMin').value)) || state.minDeals);
+  state.goalDeals = Math.max(state.minDeals, Math.round(num($('setGoal').value)) || state.goalDeals);
+  document.querySelectorAll('#closerList input').forEach(inp => {
+    const i = Number(inp.getAttribute('data-ci'));
+    if (state.closers[i]) state.closers[i].name = inp.value.trim();
+  });
+  state.closers = state.closers.filter(c => c.name);
+  persist(); closeSheets(); renderAll();
+});
+
+/* leaderboard interactions */
+$('leaderList').addEventListener('click', e => {
+  if (viewing !== null) return;
+  const row = e.target.closest('.prow'); if (!row) return;
+  const idx = row.getAttribute('data-idx');
+  if (idx === 'me') { $('fab').click(); return; }
+  state.closers[Number(idx)].count++;
+  persist(); renderLeader();
+});
+$('leaderList').addEventListener('contextmenu', e => {
+  const row = e.target.closest('.prow'); if (!row) return;
+  e.preventDefault();
+  if (viewing !== null) return;
+  const idx = row.getAttribute('data-idx');
+  if (idx === 'me') {
+    if (state.deals.length) { state.deals.pop(); persist(); renderAll(); }
+    return;
+  }
+  const c = state.closers[Number(idx)];
+  if (c.count > 0) { c.count--; persist(); renderLeader(); }
+});
+
+/* goals interactions */
+$('goalsList').addEventListener('click', e => {
+  if (viewing !== null) return;
+  const row = e.target.closest('.grow'); if (!row) return;
+  const i = Number(row.getAttribute('data-i'));
+  if (e.target.closest('.del')) { state.goals.splice(i, 1); persist(); renderGoals(); return; }
+  if (e.target.closest('.chk')) { state.goals[i].done = !state.goals[i].done; persist(); renderGoals(); }
+});
+$('goalsList').addEventListener('focusout', e => {
+  if (viewing !== null) return;
+  const txt = e.target.closest('.gtxt'); if (!txt) return;
+  const row = txt.closest('.grow'); const i = Number(row.getAttribute('data-i'));
+  const v = txt.textContent.trim();
+  if (!v) { state.goals.splice(i, 1); renderGoals(); }
+  else state.goals[i].text = v;
+  persist();
+});
+$('goalsList').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.closest('.gtxt')) { e.preventDefault(); e.target.blur(); }
+});
+$('addGoal').addEventListener('click', () => {
+  if (viewing !== null) return;
+  state.goals.push({ text: 'new goal', done: false });
+  persist(); renderGoals();
+  const rows = document.querySelectorAll('#goalsList .gtxt');
+  const last = rows[rows.length - 1];
+  if (last) { last.focus(); document.getSelection().selectAllChildren(last); }
+});
+
+window.addEventListener('resize', renderChart);
+
+/* ---------- boot ---------- */
+// a board is "pristine" if it has never actually been used — safe to replace with starter data
+function boardIsPristine(s) {
+  try {
+    return (s.deals || []).length === 0 &&
+           (s.bonuses || []).length === 0 &&
+           (s.history || []).length === 0 &&
+           (s.closers || []).every(c => !c.count) &&
+           (s.goals || []).every(g => !g.done);
+  } catch (e) { return false; }
+}
+
+loadState((saved, existed, starter) => {
+  const useStarter = starter && typeof starter === 'object' &&
+    (!saved || typeof saved !== 'object' || boardIsPristine(saved));
+  if (useStarter) {
+    // this build shipped with a starter board and the local one was never used: adopt it
+    state = Object.assign(state, starter);
+    if (!Array.isArray(state.history)) state.history = [];
+    rollover();
+    persist();
+  } else if (saved && typeof saved === 'object') {
+    state = Object.assign(state, saved);
+    if (!Array.isArray(state.history)) state.history = [];
+    rollover();
+  } else if (!existed) {
+    persist(); // genuinely first run, no starter: write the fresh seed
+  } else {
+    // a data file exists but didn't parse — do NOT overwrite it; data.json.bak holds the previous good version
+    console.error('GoalKeeper: data file exists but is unreadable; starting read-only-ish session without persisting the seed.');
+  }
+  renderAll();
+});
+
+/* native window drag from the top bar (excluding its interactive controls) */
+const inTopbarControls = e => e.target.closest('.monthbtn, .iconbtn, .backchip, .monthpop');
+document.querySelector('.topbar').addEventListener('mousedown', e => {
+  if (e.button !== 0 || inTopbarControls(e)) return;
+  if (native) native.postMessage({ type: 'drag' });
+});
+document.querySelector('.topbar').addEventListener('dblclick', e => {
+  if (inTopbarControls(e)) return;
+  if (native) native.postMessage({ type: 'zoomWindow' });
+});
+</script>
+</body>
+</html>
