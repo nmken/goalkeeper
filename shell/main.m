@@ -884,11 +884,19 @@ static NSString *SHA256Hex(NSData *data) {
     NSString *js = nil;
     if ([env[@"GK_DEBUG_EXPORT"] isEqualToString:@"1"]) {
         js = @"window.webkit.messageHandlers.bridge.postMessage({type:'export',"
-             @"data:JSON.stringify({app:'GoalKeeper',debug:true}),filename:'GoalKeeper-backup-debug.json'})";
+             @"data:JSON.stringify({app:'GoalKeeper',debug:true,shell:window.__shell}),filename:'GoalKeeper-backup-debug.json'})";
     } else if ([env[@"GK_DEBUG_BG"] isEqualToString:@"1"]) {
         js = @"window.webkit.messageHandlers.bridge.postMessage({type:'windowBg',r:20,g:20,b:30})";
     } else if ([env[@"GK_DEBUG_IMPORT"] isEqualToString:@"1"]) {
         js = @"window.webkit.messageHandlers.bridge.postMessage({type:'import'})";
+    }
+    if ([env[@"GK_DEBUG_SHELL"] isEqualToString:@"1"]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self.webView evaluateJavaScript:@"JSON.stringify(window.__shell)"
+                           completionHandler:^(id result, NSError *e) {
+                NSLog(@"GoalKeeper: window.__shell = %@ (err %@)", result, e.localizedDescription ?: @"none");
+            }];
+        });
     }
     if (!js) return;
     NSString *script = js;
