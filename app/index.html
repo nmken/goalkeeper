@@ -108,6 +108,7 @@
   input, [contenteditable] { -webkit-user-select: text; user-select: text; }
   ::selection { background: var(--selection); }
   input::placeholder { color: var(--placeholder); }
+  input:-webkit-autofill { -webkit-box-shadow: 0 0 0 100px var(--input-bg) inset; -webkit-text-fill-color: var(--ink); }
 
   html, body { height: 100%; overflow: hidden; }
 
@@ -724,7 +725,7 @@
       </div>
     </div>
     <div class="row">
-      <button class="btn danger" id="closeoutBtn">Close out</button>
+      <button class="btn danger small" id="closeoutBtn">Close out</button>
       <button class="btn ghost" data-close>Cancel</button>
       <button class="btn" id="saveSet">Save</button>
     </div>
