@@ -1,5 +1,7 @@
 # GoalKeeper 1.1 — self-updater, themes, and four feature requests (revised plan, 2026-09-01)
 
+> **Status (2026-09-01): shipped as v1.1.** Every step below landed and was verified (browser pass, native runs, local updater feed incl. assets, corrupt-data guard). Kept for the rationale and the release recipe.
+
 Revision of the original 1.1 plan with the findings of `PLAN-AUDIT-1.1.md` merged in. This is the
 execution document; the audit stays as the rationale.
 
