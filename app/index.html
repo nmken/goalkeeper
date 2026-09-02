@@ -272,11 +272,12 @@
     mask-image: linear-gradient(to bottom, transparent 0, black 10px, black calc(100% - 22px), transparent 100%);
   }
   .lrow {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 3px 4px;
     font-size: 19px;
     border-radius: 12px;
   }
+  .lrow .who { flex-basis: 100%; padding-left: 32px; margin-top: -4px; font-size: 14px; line-height: 1.15; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lrow[data-kind] { cursor: pointer; transition: background .12s, box-shadow .15s; }
   .lrow[data-kind]:hover { background: var(--row-hover); box-shadow: 0 0 0 1.5px rgba(var(--accent-rgb),0.55); }
   .lrow .cum { font-family: 'Kalam', cursive; font-size: 18px; }
@@ -531,6 +532,21 @@
     box-shadow: 0 0 14px rgba(var(--accent-rgb),0.45);
   }
 
+  /* ---------- confetti + toast ---------- */
+  #confetti { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
+  .toast {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 51;
+    font-family: 'Kalam', cursive; font-size: 24px; color: var(--ink);
+    padding: 8px 24px;
+    background: var(--sheet-bg); border: 1px solid var(--sheet-border); border-radius: 40px;
+    backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    box-shadow: 0 16px 40px rgba(var(--shadow-rgb),0.35), 0 0 24px rgba(var(--accent-rgb),0.35);
+    pointer-events: none; white-space: nowrap;
+    animation: toastin .35s cubic-bezier(.2,.9,.3,1.25);
+  }
+  .toast.out { opacity: 0; transition: opacity .4s; }
+  @keyframes toastin { from { opacity: 0; transform: translate(-50%, -14px) scale(.96); } to { opacity: 1; transform: translateX(-50%); } }
+
   @media (prefers-reduced-motion: reduce) {
     .panel, .postit, .fab, .sheet, .cash .bill { animation: none; }
   }
@@ -655,6 +671,7 @@
     <h3 id="dealTitle">Log a deal ✍️</h3>
     <div class="field"><label>Deal total $</label><input type="text" id="dealAmt" inputmode="decimal" placeholder="4500"></div>
     <div class="field"><label>My commission $ <span id="pctHint"></span></label><input type="text" id="dealComm" inputmode="decimal"></div>
+    <div class="field"><label>Bought by</label><input type="text" id="dealWho" placeholder="who bought it? (optional)" list="whoList" maxlength="40" autocomplete="off"><datalist id="whoList"></datalist></div>
     <div class="field"><label>Week</label><div class="weekchips" id="dealWeeks"></div></div>
     <div class="row">
       <button class="btn danger" id="delDeal" style="display:none">Scrap it</button>
@@ -845,6 +862,76 @@ function starSVG() {
   return `<svg class="star" viewBox="0 0 24 24"><path d="M12 3.2 L14.3 8.9 L20.6 9.3 L15.8 13.3 L17.4 19.4 L12 16 L6.6 19.5 L8.1 13.4 L3.3 9.4 L9.6 8.9 Z" stroke="#d99a00" stroke-width="1.8" fill="rgba(255,200,60,0.35)" stroke-linejoin="round"/></svg>`;
 }
 
+/* ---------- toast ---------- */
+function toast(msg, ms = 2600) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 450); }, ms);
+}
+
+/* ---------- confetti: no library, canvas only, colors from the active theme ---------- */
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let cfCanvas = null, cfCtx = null, cfParts = [], cfRaf = 0, cfLast = 0;
+function cfColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return [cs.getPropertyValue('--accent').trim() || '#8B5CF6', cs.getPropertyValue('--accent-2').trim() || '#ff8fd0', '#f2cf6b', '#ffffff'];
+}
+function cfSize() {
+  const dpr = window.devicePixelRatio || 1;
+  cfCanvas.width = Math.round(innerWidth * dpr); cfCanvas.height = Math.round(innerHeight * dpr);
+  cfCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function confetti({ power = 'small', x, y } = {}) {
+  if (!cfCanvas) {
+    cfCanvas = document.createElement('canvas'); cfCanvas.id = 'confetti';
+    document.body.appendChild(cfCanvas); cfCtx = cfCanvas.getContext('2d');
+    window.addEventListener('resize', () => { if (cfCanvas) cfSize(); });
+  }
+  cfSize();
+  const n = power === 'big' ? 180 : power === 'medium' ? 90 : 40;
+  const colors = cfColors();
+  const cx = x == null ? innerWidth / 2 : x, cy = y == null ? innerHeight * 0.38 : y;
+  const spread = power === 'big' ? innerWidth * 0.7 : power === 'medium' ? 160 : 30;
+  const kick = power === 'big' ? 15 : power === 'medium' ? 12 : 8;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = Math.random() * kick;
+    cfParts.push({
+      x: cx + (Math.random() - 0.5) * spread, y: cy + (Math.random() - 0.5) * 20,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (power === 'small' ? 5 : 8),
+      w: 5 + Math.random() * 6, h: 3 + Math.random() * 5,
+      rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.35,
+      color: colors[i % colors.length], circle: Math.random() < 0.18,
+      life: 1, decay: (power === 'big' ? 0.0045 : 0.007) + Math.random() * 0.005,
+    });
+  }
+  if (reducedMotion) { cfDraw(); setTimeout(() => { cfParts = []; cfCtx.clearRect(0, 0, innerWidth, innerHeight); }, 1400); return; }
+  if (!cfRaf) { cfLast = performance.now(); cfRaf = requestAnimationFrame(cfTick); }
+}
+function cfDraw() {
+  cfCtx.clearRect(0, 0, innerWidth, innerHeight);
+  for (const p of cfParts) {
+    cfCtx.save(); cfCtx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.4));
+    cfCtx.translate(p.x, p.y); cfCtx.rotate(p.rot); cfCtx.fillStyle = p.color;
+    if (p.circle) { cfCtx.beginPath(); cfCtx.arc(0, 0, p.h / 1.4, 0, Math.PI * 2); cfCtx.fill(); }
+    else cfCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.rot * 1.7)) + 1);
+    cfCtx.restore();
+  }
+}
+function cfTick(t) {
+  const dt = Math.min(2.5, (t - cfLast) / 16.7); cfLast = t;
+  if (!document.hidden) {
+    for (const p of cfParts) {
+      p.vy += 0.28 * dt; p.vx *= Math.pow(0.985, dt); p.vy *= Math.pow(0.992, dt);
+      p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= p.decay * dt;
+    }
+    cfParts = cfParts.filter(p => p.life > 0 && p.y < innerHeight + 30);
+    cfDraw();
+  }
+  if (cfParts.length) cfRaf = requestAnimationFrame(cfTick);
+  else { cfRaf = 0; cfCtx.clearRect(0, 0, innerWidth, innerHeight); }
+}
+
 /* ---------- renders ---------- */
 function renderTop() {
   const [y, m] = board().month.split('-').map(Number);
@@ -910,7 +997,8 @@ function renderLadder() {
       if (dealIdx === state.minDeals) flag = '<span class="flag">min!</span>';
       else if (dealIdx === state.goalDeals) flag = '<span class="flag">GOAL!!</span>';
       else if (dealIdx === Math.ceil(state.goalDeals / 2)) flag = '<span class="flag">halfway!</span>';
-      html += `<div class="lrow" data-kind="deal" data-idx="${e.i}">${checkboxSVG(true, dealIdx)}<span class="cum">${fmt(cum)}</span>${flag}${flag ? '' : `<span class="amt">${fmt(e.amt)}</span>`}</div>`;
+      const who = (e.who || '').trim();
+      html += `<div class="lrow" data-kind="deal" data-idx="${e.i}" title="${esc(who ? who + ' · ' : '')}${fmt(e.amt)}">${checkboxSVG(true, dealIdx)}<span class="cum">${fmt(cum)}</span>${flag}${flag ? '' : `<span class="amt">${fmt(e.amt)}</span>`}${who ? `<span class="who">${esc(who)}</span>` : ''}</div>`;
     } else {
       html += `<div class="lrow bonusrow" data-kind="bonus" data-idx="${e.i}">+${fmt(e.amt)} ${esc(e.label || 'bonus')}</div>`;
     }
@@ -1108,6 +1196,13 @@ $('monthPop').addEventListener('click', e => {
 document.addEventListener('click', () => { $('monthPop').hidden = true; });
 $('backChip').addEventListener('click', () => { viewing = null; renderAll(); });
 
+/* buyer-name autocomplete: distinct names from this month + history, most frequent first */
+function renderWhoList() {
+  const freq = new Map();
+  [state, ...state.history].forEach(b => (b.deals || []).forEach(d => { const w = (d.who || '').trim(); if (w) freq.set(w, (freq.get(w) || 0) + 1); }));
+  $('whoList').innerHTML = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(([w]) => `<option value="${esc(w)}">`).join('');
+}
+
 /* deal sheet — add & edit */
 let commTouched = false;
 let amtTouched = false;
@@ -1118,7 +1213,7 @@ $('fab').addEventListener('click', () => {
   $('dealTitle').textContent = 'Log a deal ✍️';
   $('saveDeal').textContent = 'Close it!';
   $('delDeal').style.display = 'none';
-  $('dealAmt').value = ''; $('dealComm').value = '';
+  $('dealAmt').value = ''; $('dealComm').value = ''; $('dealWho').value = ''; renderWhoList();
   $('pctHint').textContent = `(auto ${state.pct}%)`;
   selWeek = weekOf(Date.now()); renderWeekChips('dealWeeks');
   openSheet('dealOverlay');
@@ -1136,13 +1231,23 @@ function saveDeal() {
   const amt = num($('dealAmt').value);
   const comm = num($('dealComm').value) || Math.round(amt * state.pct / 100);
   if (amt <= 0 && comm <= 0) return;
+  const who = $('dealWho').value.trim().slice(0, 40);
+  let celebrate = null;
   if (editing && editing.kind === 'deal') {
     const d = state.deals[editing.idx];
     d.amt = amt; d.comm = comm; d.ts = tsForWeek(selWeek, d.ts);
+    if (who) d.who = who; else delete d.who;
   } else {
-    state.deals.push({ amt, comm, ts: tsForWeek(selWeek, Date.now()) });
+    const prev = state.deals.length, d = { amt, comm, ts: tsForWeek(selWeek, Date.now()) };
+    if (who) d.who = who;
+    state.deals.push(d);
+    const n = prev + 1;
+    if (prev < state.goalDeals && n >= state.goalDeals) celebrate = 'big';
+    else if (prev < state.minDeals && n >= state.minDeals) celebrate = 'medium';
   }
   persist(); closeSheets(); renderAll();
+  if (celebrate === 'big') { confetti({ power: 'big' }); toast(`🎉 ${state.goalDeals} deals — GOAL!!`); }
+  else if (celebrate === 'medium') { confetti({ power: 'medium' }); toast(`✅ ${state.minDeals} deals — minimum hit!`); }
 }
 $('saveDeal').addEventListener('click', saveDeal);
 $('dealOverlay').addEventListener('keydown', e => { if (e.key === 'Enter') saveDeal(); });
@@ -1192,7 +1297,7 @@ $('ladderList').addEventListener('click', e => {
     $('dealTitle').textContent = 'Edit deal ✏️';
     $('saveDeal').textContent = 'Save';
     $('delDeal').style.display = '';
-    $('dealAmt').value = d.amt || ''; $('dealComm').value = d.comm || '';
+    $('dealAmt').value = d.amt || ''; $('dealComm').value = d.comm || ''; $('dealWho').value = d.who || ''; renderWhoList();
     $('pctHint').textContent = `(auto ${state.pct}%)`;
     selWeek = weekOf(d.ts); renderWeekChips('dealWeeks');
     openSheet('dealOverlay');
@@ -1268,7 +1373,12 @@ $('goalsList').addEventListener('click', e => {
   const row = e.target.closest('.grow'); if (!row) return;
   const i = Number(row.getAttribute('data-i'));
   if (e.target.closest('.del')) { state.goals.splice(i, 1); persist(); renderGoals(); return; }
-  if (e.target.closest('.chk')) { state.goals[i].done = !state.goals[i].done; persist(); renderGoals(); }
+  if (e.target.closest('.chk')) {
+    const nowDone = !state.goals[i].done;
+    const r = e.target.closest('.chk').getBoundingClientRect();
+    state.goals[i].done = nowDone; persist(); renderGoals();
+    if (nowDone) confetti({ power: 'small', x: r.left + r.width / 2, y: r.top + r.height / 2 });
+  }
 });
 $('goalsList').addEventListener('focusout', e => {
   if (viewing !== null) return;

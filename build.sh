@@ -6,6 +6,14 @@ cd "$(dirname "$0")"
 APP=build/GoalKeeper.app
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
+# ---- 0. version (single source of truth: the gk-version meta in app/index.html) ----
+VER=$(sed -n 's/.*<meta name="gk-version" content="\([^"]*\)">.*/\1/p' app/index.html | head -1)
+if [ -z "$VER" ]; then
+  echo 'build.sh: no <meta name="gk-version" content="..."> in app/index.html' >&2
+  exit 1
+fi
+echo "version ${VER}"
+
 # ---- 1. fonts (downloaded once, then cached in the repo) ----
 mkdir -p app/fonts
 fetch_font() {
@@ -38,7 +46,7 @@ fi
 
 # ---- 3. compile shell ----
 echo "compiling"
-clang -fobjc-arc -O2 -framework Cocoa -framework WebKit shell/main.m -o build/GoalKeeper-bin
+clang -fobjc-arc -O2 -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers shell/main.m -o build/GoalKeeper-bin
 
 # ---- 4. assemble .app ----
 echo "assembling ${APP}"
@@ -49,7 +57,7 @@ cp build/AppIcon.icns "$APP/Contents/Resources/"
 cp app/index.html "$APP/Contents/Resources/app/"
 cp -R app/fonts "$APP/Contents/Resources/app/fonts"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -57,14 +65,16 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>GoalKeeper</string>
   <key>CFBundleDisplayName</key><string>GoalKeeper</string>
   <key>CFBundleIdentifier</key><string>com.nathan.goalkeeper</string>
-  <key>CFBundleVersion</key><string>1.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>$VER</string>
+  <key>CFBundleShortVersionString</key><string>$VER</string>
   <key>CFBundleExecutable</key><string>GoalKeeper</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict>
 </plist>
 PLIST
