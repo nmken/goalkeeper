@@ -2,7 +2,7 @@
   "version": "1.1",
   "minShell": "1.1",
   "html": "index.html",
-  "sha256": "",
+  "sha256": "dfd2407a72229dd19bc1ebd7bdc76f0ad0c3f603c6fd7dd956657c5d914693f2",
   "assets": [],
   "notes": "Confetti, buyer names, close-out month, backups, themes, in-app updates."
 }
