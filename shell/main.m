@@ -310,6 +310,8 @@ static NSString *SHA256Hex(NSData *data) {
         CGFloat gg = MIN(255, MAX(0, g.integerValue)) / 255.0;
         CGFloat bb = MIN(255, MAX(0, b.integerValue)) / 255.0;
         self.window.backgroundColor = [NSColor colorWithCalibratedRed:rr green:gg blue:bb alpha:1];
+        NSLog(@"GoalKeeper: window background -> rgb(%ld,%ld,%ld)",
+              (long)r.integerValue, (long)g.integerValue, (long)b.integerValue);
     } else if ([type isEqualToString:@"revealDataFolder"]) {
         [self revealDataFolder];
     } else if ([type isEqualToString:@"openURL"]) {
